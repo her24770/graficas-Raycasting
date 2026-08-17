@@ -1,0 +1,6 @@
+/target
+
+# Música de fondo con copyright (ver Etapa 9 en PLAN.md): no se commitea,
+# cada quien coloca su propio archivo aquí antes de correr el juego.
+/assets/audio/music/*
+!/assets/audio/music/.gitkeep
