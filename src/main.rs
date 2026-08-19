@@ -23,9 +23,10 @@ const FOV: f32 = PI / 3.0;
 
 fn cell_color(cell: char) -> u32 {
     match cell {
-        '+' => 0x00AAFF,
-        '-' => 0xFF5555,
-        '|' => 0xFF5555,
+        '1' => 0x888888, // material 1 (tema por definir en la Etapa 4)
+        '2' => 0xAA4433, // material 2
+        '3' => 0x8B5A2B, // material 3
+        '4' => 0xB0B8C0, // material 4
         'g' | 'G' => 0x00FF00,
         _ => 0xFFDDDD,
     }
