@@ -1,3 +1,4 @@
+mod audio;
 mod font;
 mod framebuffer;
 mod maze;
@@ -12,6 +13,7 @@ use nalgebra_glm::Vec2;
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
+use crate::audio::AudioEngine;
 use crate::framebuffer::Framebuffer;
 use crate::maze::{load_maze, Maze};
 use crate::player::process_events;
@@ -22,6 +24,8 @@ const BLOCK_SIZE: usize = 100;
 const FOV: f32 = PI / 3.0;
 const TARGET_FPS: f32 = 15.0;
 const TORCH_COUNT: usize = 4;
+/// Distancia recorrida (en unidades del mundo) entre cada sonido de paso.
+const STEP_DISTANCE: f32 = 60.0;
 
 fn cell_to_pos(row: usize, col: usize, block_size: f32) -> Vec2 {
     Vec2::new(
@@ -96,6 +100,10 @@ fn main() {
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
     let mut z_buffer = vec![f32::MAX; framebuffer_width];
 
+    let mut audio = AudioEngine::new();
+    audio.play_music_loop("assets/audio/music/background.mp3");
+    let mut distance_since_step = 0.0;
+
     let mut window = Window::new(
         "Raycasting",
         window_width,
@@ -125,12 +133,24 @@ fn main() {
             fps_smoothed = fps_smoothed * 0.9 + (1.0 / dt) * 0.1;
         }
 
+        let pos_before = player.pos;
         process_events(&window, &mut player, &maze, BLOCK_SIZE as f32, dt, &mut mouse_prev_x);
+
+        distance_since_step += (player.pos - pos_before).magnitude();
+        if distance_since_step >= STEP_DISTANCE {
+            distance_since_step = 0.0;
+            audio.play_sfx("assets/audio/sfx/step.wav");
+        }
 
         let i = player.pos.x as usize / BLOCK_SIZE;
         let j = player.pos.y as usize / BLOCK_SIZE;
         if maze.get(j).and_then(|row| row.get(i)) == Some(&'g') {
             println!("¡Meta alcanzada! Fin del juego.");
+            audio.play_sfx("assets/audio/sfx/success.wav");
+            // el sonido se reproduce en un hilo aparte; sin esta pausa el
+            // proceso terminaría antes de que llegue a sonar (se reemplaza
+            // por la pantalla de éxito real en la Etapa 10).
+            std::thread::sleep(Duration::from_millis(1500));
             break;
         }
 

@@ -4,3 +4,4 @@
 # cada quien coloca su propio archivo aquí antes de correr el juego.
 /assets/audio/music/*
 !/assets/audio/music/.gitkeep
+!/assets/audio/music/README.md
