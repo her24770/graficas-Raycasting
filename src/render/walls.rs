@@ -9,7 +9,8 @@ const FLOOR_COLOR: u32 = 0x303030;
 
 /// Color plano de respaldo por tipo de pared, usado cuando no hay textura
 /// cargada para ese material (archivo faltante, o todavía no se agregó).
-fn fallback_color(wall_type: char) -> u32 {
+/// También la reutiliza el minimapa para pintar cada celda.
+pub fn fallback_color(wall_type: char) -> u32 {
     match wall_type {
         '1' => 0x888888,
         '2' => 0xAA4433,

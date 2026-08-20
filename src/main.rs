@@ -70,6 +70,7 @@ fn main() {
         }
 
         render::walls::render(&mut framebuffer, &maze, &player, FOV, BLOCK_SIZE as f32, &textures);
+        render::minimap::render(&mut framebuffer, &maze, &player, BLOCK_SIZE as f32);
         render::hud::draw_fps(&mut framebuffer, fps_smoothed);
 
         window
