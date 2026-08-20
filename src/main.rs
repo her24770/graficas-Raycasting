@@ -6,79 +6,24 @@ mod player;
 mod raycaster;
 mod render;
 mod sprite;
+mod state;
 mod textures;
 
-use minifb::{Key, Window, WindowOptions};
-use nalgebra_glm::Vec2;
+use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
 use crate::audio::AudioEngine;
 use crate::framebuffer::Framebuffer;
-use crate::maze::{load_maze, Maze};
 use crate::player::process_events;
-use crate::sprite::Sprite;
+use crate::state::{GameState, PlayingState, LEVELS};
 use crate::textures::TextureAtlas;
 
 const BLOCK_SIZE: usize = 100;
 const FOV: f32 = PI / 3.0;
 const TARGET_FPS: f32 = 15.0;
-const TORCH_COUNT: usize = 4;
 /// Distancia recorrida (en unidades del mundo) entre cada sonido de paso.
 const STEP_DISTANCE: f32 = 60.0;
-
-fn cell_to_pos(row: usize, col: usize, block_size: f32) -> Vec2 {
-    Vec2::new(
-        col as f32 * block_size + block_size / 2.0,
-        row as f32 * block_size + block_size / 2.0,
-    )
-}
-
-fn manhattan(a: (usize, usize), b: (usize, usize)) -> i32 {
-    (a.0 as i32 - b.0 as i32).abs() + (a.1 as i32 - b.1 as i32).abs()
-}
-
-/// Elige `count` celdas abiertas del laberinto, repartidas por el mapa en
-/// vez de amontonadas: arranca en `start` (la celda del jugador) y en cada
-/// paso agrega la celda abierta que quede más lejos de todas las ya
-/// elegidas (farthest point sampling), así los sprites quedan como algo
-/// para ir descubriendo en distintos puntos del recorrido.
-fn scatter_open_cells(maze: &Maze, start: (usize, usize), count: usize, block_size: f32) -> Vec<Vec2> {
-    let open_cells: Vec<(usize, usize)> = maze
-        .iter()
-        .enumerate()
-        .flat_map(|(row, line)| {
-            line.iter()
-                .enumerate()
-                .filter(|&(_, &cell)| cell == ' ')
-                .map(move |(col, _)| (row, col))
-        })
-        .filter(|&cell| cell != start)
-        .collect();
-
-    let mut chosen: Vec<(usize, usize)> = Vec::new();
-    let mut reference = vec![start];
-
-    for _ in 0..count.min(open_cells.len()) {
-        let next = open_cells
-            .iter()
-            .filter(|cell| !chosen.contains(cell))
-            .max_by_key(|&&cell| reference.iter().map(|&r| manhattan(cell, r)).min().unwrap_or(0));
-
-        match next {
-            Some(&cell) => {
-                chosen.push(cell);
-                reference.push(cell);
-            }
-            None => break,
-        }
-    }
-
-    chosen
-        .into_iter()
-        .map(|(row, col)| cell_to_pos(row, col, block_size))
-        .collect()
-}
 
 fn main() {
     let window_width = 1000;
@@ -87,22 +32,9 @@ fn main() {
     let framebuffer_height = 600;
     let target_frame_time = Duration::from_secs_f32(1.0 / TARGET_FPS);
 
-    let (maze, mut player) = load_maze("./assets/levels/level1.txt", BLOCK_SIZE);
     let textures = TextureAtlas::load();
-
-    let player_start_cell = (
-        (player.pos.y / BLOCK_SIZE as f32) as usize,
-        (player.pos.x / BLOCK_SIZE as f32) as usize,
-    );
-    let torch_positions = scatter_open_cells(&maze, player_start_cell, TORCH_COUNT, BLOCK_SIZE as f32);
-    let mut sprites: Vec<Sprite> = torch_positions.into_iter().map(Sprite::torch).collect();
-
     let mut framebuffer = Framebuffer::new(framebuffer_width, framebuffer_height);
-    let mut z_buffer = vec![f32::MAX; framebuffer_width];
-
     let mut audio = AudioEngine::new();
-    audio.play_music_loop("assets/audio/music/background.mp3");
-    let mut distance_since_step = 0.0;
 
     let mut window = Window::new(
         "Raycasting",
@@ -117,7 +49,7 @@ fn main() {
 
     let mut last_frame = Instant::now();
     let mut fps_smoothed = TARGET_FPS;
-    let mut mouse_prev_x: Option<f32> = None;
+    let mut state = GameState::Welcome { selected: 0 };
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let frame_start = Instant::now();
@@ -133,43 +65,77 @@ fn main() {
             fps_smoothed = fps_smoothed * 0.9 + (1.0 / dt) * 0.1;
         }
 
-        let pos_before = player.pos;
-        process_events(&window, &mut player, &maze, BLOCK_SIZE as f32, dt, &mut mouse_prev_x);
+        let confirm_pressed = window.is_key_pressed(Key::Enter, KeyRepeat::No)
+            || window.is_key_pressed(Key::Space, KeyRepeat::No);
 
-        distance_since_step += (player.pos - pos_before).magnitude();
-        if distance_since_step >= STEP_DISTANCE {
-            distance_since_step = 0.0;
-            audio.play_sfx("assets/audio/sfx/step.wav");
+        // Las transiciones de estado se juntan acá en vez de reasignar
+        // `state` dentro del match: así no hay conflicto de préstamos con
+        // los bindings (`selected`, `ps`, `level_index`) que vienen de
+        // matchear sobre `&mut state`.
+        let mut next_state: Option<GameState> = None;
+
+        match &mut state {
+            GameState::Welcome { selected } => {
+                if window.is_key_pressed(Key::W, KeyRepeat::No) || window.is_key_pressed(Key::Up, KeyRepeat::No) {
+                    *selected = (*selected + LEVELS.len() - 1) % LEVELS.len();
+                }
+                if window.is_key_pressed(Key::S, KeyRepeat::No) || window.is_key_pressed(Key::Down, KeyRepeat::No) {
+                    *selected = (*selected + 1) % LEVELS.len();
+                }
+
+                let chosen = *selected;
+                render::screen::draw_welcome(&mut framebuffer, chosen);
+
+                if confirm_pressed {
+                    let playing = PlayingState::new(chosen, BLOCK_SIZE, framebuffer_width);
+                    audio.play_music_loop("assets/audio/music/background.mp3");
+                    next_state = Some(GameState::Playing(playing));
+                }
+            }
+            GameState::Playing(ps) => {
+                let pos_before = ps.player.pos;
+                process_events(&window, &mut ps.player, &ps.maze, BLOCK_SIZE as f32, dt, &mut ps.mouse_prev_x);
+
+                ps.distance_since_step += (ps.player.pos - pos_before).magnitude();
+                if ps.distance_since_step >= STEP_DISTANCE {
+                    ps.distance_since_step = 0.0;
+                    audio.play_sfx("assets/audio/sfx/step.mp3");
+                }
+
+                for sprite in ps.sprites.iter_mut() {
+                    sprite.update(dt);
+                }
+
+                render::walls::render(
+                    &mut framebuffer,
+                    &ps.maze,
+                    &ps.player,
+                    FOV,
+                    BLOCK_SIZE as f32,
+                    &textures,
+                    &mut ps.z_buffer,
+                );
+                render::sprites::render(&mut framebuffer, &ps.player, &ps.sprites, FOV, BLOCK_SIZE as f32, &ps.z_buffer);
+                render::minimap::render(&mut framebuffer, &ps.maze, &ps.player, BLOCK_SIZE as f32);
+                render::hud::draw_fps(&mut framebuffer, fps_smoothed);
+
+                if ps.reached_goal(BLOCK_SIZE) {
+                    audio.play_sfx("assets/audio/sfx/success.mp3");
+                    next_state = Some(GameState::Success { level_index: ps.level_index });
+                }
+            }
+            GameState::Success { level_index } => {
+                render::screen::draw_success(&mut framebuffer, *level_index);
+
+                if confirm_pressed {
+                    next_state = Some(GameState::Welcome { selected: *level_index });
+                }
+            }
         }
 
-        let i = player.pos.x as usize / BLOCK_SIZE;
-        let j = player.pos.y as usize / BLOCK_SIZE;
-        if maze.get(j).and_then(|row| row.get(i)) == Some(&'g') {
-            println!("¡Meta alcanzada! Fin del juego.");
-            audio.play_sfx("assets/audio/sfx/success.wav");
-            // el sonido se reproduce en un hilo aparte; sin esta pausa el
-            // proceso terminaría antes de que llegue a sonar (se reemplaza
-            // por la pantalla de éxito real en la Etapa 10).
-            std::thread::sleep(Duration::from_millis(1500));
-            break;
+        if let Some(ns) = next_state {
+            state = ns;
         }
-
-        for sprite in sprites.iter_mut() {
-            sprite.update(dt);
-        }
-
-        render::walls::render(
-            &mut framebuffer,
-            &maze,
-            &player,
-            FOV,
-            BLOCK_SIZE as f32,
-            &textures,
-            &mut z_buffer,
-        );
-        render::sprites::render(&mut framebuffer, &player, &sprites, FOV, BLOCK_SIZE as f32, &z_buffer);
-        render::minimap::render(&mut framebuffer, &maze, &player, BLOCK_SIZE as f32);
-        render::hud::draw_fps(&mut framebuffer, fps_smoothed);
 
         window
             .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
