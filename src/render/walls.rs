@@ -2,28 +2,21 @@ use crate::framebuffer::Framebuffer;
 use crate::maze::Maze;
 use crate::player::Player;
 use crate::raycaster::cast_ray;
+use crate::textures::TextureAtlas;
 
 const CEILING_COLOR: u32 = 0x404060;
 const FLOOR_COLOR: u32 = 0x303030;
 
-/// Color por tipo de pared. Placeholder: la textura real por material
-/// llega en la Etapa 4 (Texturizado de paredes) del PLAN.md.
-fn wall_color(wall_type: char, side: u8) -> u32 {
-    let base = match wall_type {
+/// Color plano de respaldo por tipo de pared, usado cuando no hay textura
+/// cargada para ese material (archivo faltante, o todavía no se agregó).
+fn fallback_color(wall_type: char) -> u32 {
+    match wall_type {
         '1' => 0x888888,
         '2' => 0xAA4433,
         '3' => 0x8B5A2B,
         '4' => 0xB0B8C0,
         'g' | 'G' => 0x00FF00,
         _ => 0xFFDDDD,
-    };
-
-    // Sombrea distinto según la orientación de la cara golpeada, para dar
-    // sensación de volumen aunque todavía no haya texturas reales.
-    if side == 1 {
-        shade(base, 0.7)
-    } else {
-        base
     }
 }
 
@@ -36,8 +29,16 @@ fn shade(color: u32, factor: f32) -> u32 {
 
 /// Renderiza la vista en primera persona: un rayo por columna de píxeles,
 /// proyectado a una franja vertical cuya altura depende de la distancia
-/// perpendicular corregida (para evitar el efecto fisheye).
-pub fn render(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player, fov: f32, block_size: f32) {
+/// perpendicular corregida (para evitar el efecto fisheye), texturizada por
+/// tipo de pared con `tex_x` (horizontal) y un `tex_y` interpolado por fila.
+pub fn render(
+    framebuffer: &mut Framebuffer,
+    maze: &Maze,
+    player: &Player,
+    fov: f32,
+    block_size: f32,
+    textures: &TextureAtlas,
+) {
     let width = framebuffer.width;
     let height = framebuffer.height;
 
@@ -78,9 +79,34 @@ pub fn render(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player, fov: 
         let draw_start = (half - wall_height / 2.0).max(0.0) as usize;
         let draw_end = (half + wall_height / 2.0).min(height as f32 - 1.0) as usize;
 
-        framebuffer.set_current_color(wall_color(hit.wall_type, hit.side));
-        for y in draw_start..=draw_end {
-            framebuffer.point(x, y);
+        let shade_factor = if hit.side == 1 { 0.7 } else { 1.0 };
+
+        match textures.get(hit.wall_type) {
+            Some(texture) => {
+                // Cuánto avanza la coordenada vertical de la textura por
+                // cada píxel de pantalla; si la pared está recortada arriba
+                // o abajo (más alta que la ventana), se arranca desde el
+                // punto de la textura que le corresponde a ese recorte.
+                let tex_step = texture.height as f32 / wall_height;
+                let clipped_top = half - wall_height / 2.0;
+                let mut tex_pos = (draw_start as f32 - clipped_top) * tex_step;
+
+                for y in draw_start..=draw_end {
+                    let v = (tex_pos / texture.height as f32).fract();
+                    tex_pos += tex_step;
+
+                    let color = shade(texture.sample(hit.tex_x, v), shade_factor);
+                    framebuffer.set_current_color(color);
+                    framebuffer.point(x, y);
+                }
+            }
+            None => {
+                let color = shade(fallback_color(hit.wall_type), shade_factor);
+                framebuffer.set_current_color(color);
+                for y in draw_start..=draw_end {
+                    framebuffer.point(x, y);
+                }
+            }
         }
     }
 }
