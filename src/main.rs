@@ -94,13 +94,22 @@ fn main() {
             }
             GameState::Playing(ps) => {
                 let pos_before = ps.player.pos;
-                process_events(&window, &mut ps.player, &ps.maze, BLOCK_SIZE as f32, dt, &mut ps.mouse_prev_x);
+                let blocked = process_events(&window, &mut ps.player, &ps.maze, BLOCK_SIZE as f32, dt, &mut ps.mouse_prev_x);
+
+                // solo cuenta el golpe cuando arranca el contacto, no cada
+                // cuadro que se sigue empujando contra la misma pared.
+                if blocked && !ps.was_blocked {
+                    ps.collisions += 1;
+                }
+                ps.was_blocked = blocked;
 
                 ps.distance_since_step += (ps.player.pos - pos_before).magnitude();
                 if ps.distance_since_step >= STEP_DISTANCE {
                     ps.distance_since_step = 0.0;
                     audio.play_sfx("assets/audio/sfx/step.mp3");
                 }
+
+                ps.time_left = (ps.time_left - dt).max(0.0);
 
                 for sprite in ps.sprites.iter_mut() {
                     sprite.update(dt);
@@ -118,14 +127,32 @@ fn main() {
                 render::sprites::render(&mut framebuffer, &ps.player, &ps.sprites, FOV, BLOCK_SIZE as f32, &ps.z_buffer);
                 render::minimap::render(&mut framebuffer, &ps.maze, &ps.player, BLOCK_SIZE as f32);
                 render::hud::draw_fps(&mut framebuffer, fps_smoothed);
+                render::hud::draw_timer(&mut framebuffer, ps.time_left);
+                render::hud::draw_collisions(&mut framebuffer, ps.collisions);
 
                 if ps.reached_goal(BLOCK_SIZE) {
                     audio.play_sfx("assets/audio/sfx/success.mp3");
-                    next_state = Some(GameState::Success { level_index: ps.level_index });
+                    next_state = Some(GameState::Success {
+                        level_index: ps.level_index,
+                        collisions: ps.collisions,
+                        time_used: ps.time_used(),
+                    });
+                } else if ps.time_left <= 0.0 {
+                    next_state = Some(GameState::TimeUp {
+                        level_index: ps.level_index,
+                        collisions: ps.collisions,
+                    });
                 }
             }
-            GameState::Success { level_index } => {
-                render::screen::draw_success(&mut framebuffer, *level_index);
+            GameState::Success { level_index, collisions, time_used } => {
+                render::screen::draw_success(&mut framebuffer, *level_index, *collisions, *time_used);
+
+                if confirm_pressed {
+                    next_state = Some(GameState::Welcome { selected: *level_index });
+                }
+            }
+            GameState::TimeUp { level_index, collisions } => {
+                render::screen::draw_time_up(&mut framebuffer, *level_index, *collisions);
 
                 if confirm_pressed {
                     next_state = Some(GameState::Welcome { selected: *level_index });

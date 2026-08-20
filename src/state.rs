@@ -16,6 +16,9 @@ pub const LEVELS: [LevelInfo; 3] = [
 ];
 
 const TORCH_COUNT: usize = 4;
+/// Tiempo límite por intento, en segundos. Si se agota antes de llegar a
+/// la meta, el nivel se pierde.
+pub const TIME_LIMIT: f32 = 60.0;
 
 /// Todo el estado que solo existe mientras se está jugando un nivel. Se
 /// crea de cero cada vez que se entra a Playing (desde Welcome), así que
@@ -28,12 +31,18 @@ pub struct PlayingState {
     pub z_buffer: Vec<f32>,
     pub distance_since_step: f32,
     pub mouse_prev_x: Option<f32>,
+    pub collisions: u32,
+    /// Si el jugador ya estaba chocando contra una pared el frame pasado,
+    /// para contar golpes (choques nuevos), no cuadros de contacto seguido.
+    pub was_blocked: bool,
+    pub time_left: f32,
 }
 
 pub enum GameState {
     Welcome { selected: usize },
     Playing(PlayingState),
-    Success { level_index: usize },
+    Success { level_index: usize, collisions: u32, time_used: f32 },
+    TimeUp { level_index: usize, collisions: u32 },
 }
 
 fn cell_to_pos(row: usize, col: usize, block_size: f32) -> Vec2 {
@@ -125,6 +134,9 @@ impl PlayingState {
             z_buffer: vec![f32::MAX; framebuffer_width],
             distance_since_step: 0.0,
             mouse_prev_x: None,
+            collisions: 0,
+            was_blocked: false,
+            time_left: TIME_LIMIT,
         }
     }
 
@@ -133,5 +145,10 @@ impl PlayingState {
         let i = self.player.pos.x as usize / block_size;
         let j = self.player.pos.y as usize / block_size;
         self.maze.get(j).and_then(|row| row.get(i)) == Some(&'g')
+    }
+
+    /// Tiempo que tardó el intento hasta ahora (para mostrar al terminar).
+    pub fn time_used(&self) -> f32 {
+        TIME_LIMIT - self.time_left.max(0.0)
     }
 }

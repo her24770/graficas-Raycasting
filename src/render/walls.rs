@@ -4,8 +4,24 @@ use crate::player::Player;
 use crate::raycaster::cast_ray;
 use crate::textures::TextureAtlas;
 
-const CEILING_COLOR: u32 = 0x404060;
-const FLOOR_COLOR: u32 = 0x303030;
+// Colores de piso/techo cerca del jugador (borde de la pantalla) y lejos
+// de él (hacia el horizonte, al centro de la pantalla), para simular
+// niebla por distancia en vez de un color plano fijo.
+const CEILING_NEAR: (u8, u8, u8) = (0x55, 0x55, 0x7A);
+const CEILING_FAR: (u8, u8, u8) = (0x20, 0x20, 0x30);
+const FLOOR_NEAR: (u8, u8, u8) = (0x45, 0x45, 0x45);
+const FLOOR_FAR: (u8, u8, u8) = (0x18, 0x18, 0x18);
+
+fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
+    (a as f32 + (b as f32 - a as f32) * t) as u8
+}
+
+fn lerp_color(near: (u8, u8, u8), far: (u8, u8, u8), t: f32) -> u32 {
+    let r = lerp_u8(near.0, far.0, t) as u32;
+    let g = lerp_u8(near.1, far.1, t) as u32;
+    let b = lerp_u8(near.2, far.2, t) as u32;
+    (r << 16) | (g << 8) | b
+}
 
 /// Color plano de respaldo por tipo de pared, usado cuando no hay textura
 /// cargada para ese material (archivo faltante, o todavía no se agregó).
@@ -44,15 +60,23 @@ pub fn render(
     let width = framebuffer.width;
     let height = framebuffer.height;
 
-    framebuffer.set_current_color(CEILING_COLOR);
+    let half = height as f32 / 2.0;
+
+    // Techo: t=0 en el borde superior (el punto más cercano al jugador),
+    // t=1 en el horizonte (el punto más lejano), oscureciendo hacia el
+    // centro para dar sensación de niebla/profundidad.
     for y in 0..height / 2 {
+        let t = (y as f32 / half).clamp(0.0, 1.0);
+        framebuffer.set_current_color(lerp_color(CEILING_NEAR, CEILING_FAR, t));
         for x in 0..width {
             framebuffer.point(x, y);
         }
     }
 
-    framebuffer.set_current_color(FLOOR_COLOR);
+    // Piso: misma idea, pero t=0 en el borde inferior (más cerca).
     for y in height / 2..height {
+        let t = ((height as f32 - 1.0 - y as f32) / half).clamp(0.0, 1.0);
+        framebuffer.set_current_color(lerp_color(FLOOR_NEAR, FLOOR_FAR, t));
         for x in 0..width {
             framebuffer.point(x, y);
         }
@@ -83,7 +107,6 @@ pub fn render(
 
         let wall_height = (block_size / corrected) * dist_to_projection_plane;
 
-        let half = height as f32 / 2.0;
         let draw_start = (half - wall_height / 2.0).max(0.0) as usize;
         let draw_end = (half + wall_height / 2.0).min(height as f32 - 1.0) as usize;
 

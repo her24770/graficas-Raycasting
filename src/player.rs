@@ -59,6 +59,8 @@ fn collides(maze: &Maze, pos: Vec2, radius: f32, block_size: f32) -> bool {
 /// anterior para calcular el delta de rotación; se pasa desde afuera para
 /// que sobreviva entre llamadas. En `None` (primer frame) no se aplica
 /// rotación todavía, solo se registra la posición inicial.
+/// Devuelve `true` si este frame el jugador intentó moverse y chocó contra
+/// una pared en al menos un eje (para que quien llama pueda contar golpes).
 pub fn process_events(
     window: &Window,
     player: &mut Player,
@@ -66,7 +68,7 @@ pub fn process_events(
     block_size: f32,
     dt: f32,
     mouse_prev_x: &mut Option<f32>,
-) {
+) -> bool {
     let mut turn = 0.0;
     let mut forward = 0.0;
 
@@ -100,6 +102,8 @@ pub fn process_events(
         *mouse_prev_x = Some(mouse_x);
     }
 
+    let mut blocked = false;
+
     if forward != 0.0 {
         let radius = block_size * PLAYER_RADIUS_RATIO;
         let step = MOVE_SPEED * forward * dt;
@@ -108,11 +112,17 @@ pub fn process_events(
         let try_x = Vec2::new(player.pos.x + dir.x * step, player.pos.y);
         if !collides(maze, try_x, radius, block_size) {
             player.pos.x = try_x.x;
+        } else {
+            blocked = true;
         }
 
         let try_y = Vec2::new(player.pos.x, player.pos.y + dir.y * step);
         if !collides(maze, try_y, radius, block_size) {
             player.pos.y = try_y.y;
+        } else {
+            blocked = true;
         }
     }
+
+    blocked
 }

@@ -1,9 +1,11 @@
 use crate::font;
 use crate::framebuffer::Framebuffer;
+use crate::render::hud::format_time;
 use crate::state::LEVELS;
 
 const LABEL_COLOR: u32 = 0xD8B4A0;
 const TITLE_COLOR: u32 = 0x5C3A2E;
+const FAIL_COLOR: u32 = 0xB03A2E;
 const ITEM_COLOR: u32 = 0xE8DCC8;
 const HIGHLIGHT_COLOR: u32 = 0xF5EDE0;
 const FOOTER_COLOR: u32 = 0xC9A98E;
@@ -126,22 +128,44 @@ pub fn draw_welcome(framebuffer: &mut Framebuffer, selected: usize) {
     font::draw_text_centered(framebuffer, cx, (height as f32 * 0.94) as usize, "ENTER: JUGAR", FOOTER_COLOR, 2);
 }
 
-/// Pantalla de éxito al completar un nivel.
-pub fn draw_success(framebuffer: &mut Framebuffer, level_index: usize) {
+/// Fondo + título + líneas de información, compartido entre la pantalla de
+/// éxito y la de tiempo agotado (mismo layout, distinto color de acento).
+fn draw_end_screen(framebuffer: &mut Framebuffer, label: &str, title: &str, info_lines: &[String], accent: u32) {
     draw_background(framebuffer);
 
     let width = framebuffer.width;
     let height = framebuffer.height;
     let cx = width / 2;
 
-    let level_name = LEVELS.get(level_index).map(|l| l.name).unwrap_or("NIVEL");
+    font::draw_text_centered(framebuffer, cx, (height as f32 * 0.24) as usize, label, LABEL_COLOR, 2);
+    font::draw_text_centered(framebuffer, cx, (height as f32 * 0.30) as usize, title, accent, 4);
+    draw_divider(framebuffer, cx, (height as f32 * 0.39) as usize, width / 8, accent);
 
-    font::draw_text_centered(framebuffer, cx, (height as f32 * 0.30) as usize, level_name, LABEL_COLOR, 2);
-    font::draw_text_centered(framebuffer, cx, (height as f32 * 0.36) as usize, "COMPLETADO", TITLE_COLOR, 4);
-    draw_divider(framebuffer, cx, (height as f32 * 0.45) as usize, width / 8, TITLE_COLOR);
+    let mut y = (height as f32 * 0.48) as usize;
+    for line in info_lines {
+        font::draw_text_centered(framebuffer, cx, y, line, ITEM_COLOR, 3);
+        y += (height as f32 * 0.07) as usize;
+    }
 
     font::draw_text_centered(framebuffer, cx, (height as f32 * 0.90) as usize, "ENTER: MENU", FOOTER_COLOR, 2);
     font::draw_text_centered(framebuffer, cx, (height as f32 * 0.94) as usize, "ESC: SALIR", FOOTER_COLOR, 2);
+}
+
+/// Pantalla de éxito al completar un nivel.
+pub fn draw_success(framebuffer: &mut Framebuffer, level_index: usize, collisions: u32, time_used: f32) {
+    let level_name = LEVELS.get(level_index).map(|l| l.name).unwrap_or("NIVEL");
+    let lines = [
+        format!("TIEMPO {}", format_time(time_used)),
+        format!("GOLPES {collisions}"),
+    ];
+    draw_end_screen(framebuffer, level_name, "COMPLETADO", &lines, TITLE_COLOR);
+}
+
+/// Pantalla de fin de nivel cuando se agota el tiempo sin llegar a la meta.
+pub fn draw_time_up(framebuffer: &mut Framebuffer, level_index: usize, collisions: u32) {
+    let level_name = LEVELS.get(level_index).map(|l| l.name).unwrap_or("NIVEL");
+    let lines = [format!("GOLPES {collisions}")];
+    draw_end_screen(framebuffer, level_name, "TIEMPO AGOTADO", &lines, FAIL_COLOR);
 }
 
 /// Silueta jagged (tipo cresta de montaña / muros irregulares) rellena
