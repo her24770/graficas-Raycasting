@@ -39,6 +39,7 @@ pub fn render(
     fov: f32,
     block_size: f32,
     textures: &TextureAtlas,
+    z_buffer: &mut [f32],
 ) {
     let width = framebuffer.width;
     let height = framebuffer.height;
@@ -67,12 +68,18 @@ pub fn render(
 
         let hit = match cast_ray(maze, player.pos, ray_angle, block_size) {
             Some(hit) => hit,
-            None => continue,
+            None => {
+                // Sin pared en esta columna: cualquier sprite se considera
+                // más cerca que "infinito" y se dibuja igual.
+                z_buffer[x] = f32::MAX;
+                continue;
+            }
         };
 
         // Corrección de fisheye: se proyecta la distancia cruda sobre la
         // dirección de vista del jugador, no se usa la distancia radial tal cual.
         let corrected = (hit.distance * (ray_angle - player.a).cos()).max(1.0);
+        z_buffer[x] = corrected;
 
         let wall_height = (block_size / corrected) * dist_to_projection_plane;
 
