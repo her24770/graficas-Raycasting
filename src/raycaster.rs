@@ -76,7 +76,9 @@ pub fn cast_ray(maze: &Maze, origin: Vec2, angle: f32, block_size: f32) -> Optio
 
         match maze.get(map_y as usize).and_then(|row| row.get(map_x as usize)) {
             None => return None,
-            Some(' ') => continue,
+            // La celda de meta es piso transitable con un sprite encima
+            // (el cofre), no una pared: no debe bloquear la vista.
+            Some(' ') | Some('g') | Some('G') => continue,
             Some(&c) => {
                 wall_type = c;
                 break;

@@ -30,7 +30,9 @@ fn is_wall(maze: &Maze, x: f32, y: f32, block_size: f32) -> bool {
     let row = (y / block_size) as usize;
 
     match maze.get(row).and_then(|r| r.get(col)) {
-        Some(' ') => false,
+        // La celda de meta es piso transitable (el jugador debe poder
+        // pararse ahí para disparar la condición de victoria), no una pared.
+        Some(' ') | Some('g') | Some('G') => false,
         Some(_) => true,
         None => true,
     }

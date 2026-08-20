@@ -88,6 +88,19 @@ fn scatter_open_cells(maze: &Maze, start: (usize, usize), count: usize, block_si
         .collect()
 }
 
+/// Busca la celda de meta ('g'/'G') en el laberinto, para ubicar ahí el
+/// sprite del cofre.
+fn find_goal_cell(maze: &Maze, block_size: f32) -> Option<Vec2> {
+    for (row, line) in maze.iter().enumerate() {
+        for (col, &cell) in line.iter().enumerate() {
+            if cell == 'g' || cell == 'G' {
+                return Some(cell_to_pos(row, col, block_size));
+            }
+        }
+    }
+    None
+}
+
 impl PlayingState {
     pub fn new(level_index: usize, block_size: usize, framebuffer_width: usize) -> Self {
         let level = &LEVELS[level_index];
@@ -98,7 +111,11 @@ impl PlayingState {
             (player.pos.x / block_size as f32) as usize,
         );
         let torch_positions = scatter_open_cells(&maze, player_start_cell, TORCH_COUNT, block_size as f32);
-        let sprites = torch_positions.into_iter().map(Sprite::torch).collect();
+        let mut sprites: Vec<Sprite> = torch_positions.into_iter().map(Sprite::torch).collect();
+
+        if let Some(goal_pos) = find_goal_cell(&maze, block_size as f32) {
+            sprites.push(Sprite::chest(goal_pos));
+        }
 
         PlayingState {
             level_index,
