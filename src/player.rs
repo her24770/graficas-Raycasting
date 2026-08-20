@@ -1,4 +1,4 @@
-use minifb::{Key, Window};
+use minifb::{Key, MouseMode, Window};
 use nalgebra_glm::Vec2;
 use std::f32::consts::PI;
 
@@ -11,8 +11,10 @@ pub struct Player {
 
 /// Velocidad de movimiento en unidades del mundo por segundo (no por frame).
 const MOVE_SPEED: f32 = 300.0;
-/// Velocidad de rotación en radianes por segundo.
+/// Velocidad de rotación en radianes por segundo (teclado).
 const ROTATION_SPEED: f32 = PI;
+/// Radianes de giro por cada píxel de movimiento horizontal del mouse.
+const MOUSE_SENSITIVITY: f32 = 0.003;
 /// Radio de colisión del jugador, como fracción del tamaño de celda.
 const PLAYER_RADIUS_RATIO: f32 = 0.2;
 
@@ -46,11 +48,23 @@ fn collides(maze: &Maze, pos: Vec2, radius: f32, block_size: f32) -> bool {
     checks.iter().any(|&(x, y)| is_wall(maze, x, y, block_size))
 }
 
-/// Lee teclado y actualiza al jugador. El movimiento se resuelve por eje
-/// (slide): si el desplazamiento en x choca se descarta, pero el de y se
-/// intenta igual, para poder deslizarse contra la pared en vez de quedar
-/// pegado en las esquinas.
-pub fn process_events(window: &Window, player: &mut Player, maze: &Maze, block_size: f32, dt: f32) {
+/// Lee teclado y mouse, y actualiza al jugador. El movimiento se resuelve
+/// por eje (slide): si el desplazamiento en x choca se descarta, pero el de
+/// y se intenta igual, para poder deslizarse contra la pared en vez de
+/// quedar pegado en las esquinas.
+///
+/// `mouse_prev_x` guarda la posición horizontal del mouse del frame
+/// anterior para calcular el delta de rotación; se pasa desde afuera para
+/// que sobreviva entre llamadas. En `None` (primer frame) no se aplica
+/// rotación todavía, solo se registra la posición inicial.
+pub fn process_events(
+    window: &Window,
+    player: &mut Player,
+    maze: &Maze,
+    block_size: f32,
+    dt: f32,
+    mouse_prev_x: &mut Option<f32>,
+) {
     let mut turn = 0.0;
     let mut forward = 0.0;
 
@@ -71,6 +85,18 @@ pub fn process_events(window: &Window, player: &mut Player, maze: &Maze, block_s
     }
 
     player.a += turn * dt;
+
+    // Rotación con el mouse (solo horizontal), por delta de posición entre
+    // frames. No se recentra el cursor (ver PLAN.md, Etapa 6): minifb no
+    // expone una forma portable de hacerlo, así que el cursor puede llegar
+    // al borde de la ventana, pero la rotación sigue funcionando mientras
+    // el mouse se siga moviendo.
+    if let Some((mouse_x, _)) = window.get_mouse_pos(MouseMode::Pass) {
+        if let Some(prev_x) = *mouse_prev_x {
+            player.a += (mouse_x - prev_x) * MOUSE_SENSITIVITY;
+        }
+        *mouse_prev_x = Some(mouse_x);
+    }
 
     if forward != 0.0 {
         let radius = block_size * PLAYER_RADIUS_RATIO;

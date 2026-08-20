@@ -44,6 +44,7 @@ fn main() {
 
     let mut last_frame = Instant::now();
     let mut fps_smoothed = TARGET_FPS;
+    let mut mouse_prev_x: Option<f32> = None;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let frame_start = Instant::now();
@@ -59,7 +60,7 @@ fn main() {
             fps_smoothed = fps_smoothed * 0.9 + (1.0 / dt) * 0.1;
         }
 
-        process_events(&window, &mut player, &maze, BLOCK_SIZE as f32, dt);
+        process_events(&window, &mut player, &maze, BLOCK_SIZE as f32, dt, &mut mouse_prev_x);
 
         let i = player.pos.x as usize / BLOCK_SIZE;
         let j = player.pos.y as usize / BLOCK_SIZE;
