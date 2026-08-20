@@ -18,7 +18,7 @@ pub fn load_maze(filename: &str, block_size: usize) -> (Maze, Player) {
 
     let mut maze: Maze = Vec::new();
 
-    let mut player_pos: Option<Vec2> = None;
+    let mut player_cell: Option<(usize, usize)> = None;
 
     for (row, line) in reader.lines().enumerate() {
         let line = line.expect("no se pudo leer una línea del laberinto");
@@ -27,10 +27,7 @@ pub fn load_maze(filename: &str, block_size: usize) -> (Maze, Player) {
 
         for (col, character) in line.chars().enumerate() {
             if character == 'p' {
-                let x = col * block_size + block_size / 2;
-                let y = row * block_size + block_size / 2;
-                player_pos = Some(Vec2::new(x as f32, y as f32));
-
+                player_cell = Some((row, col));
                 cells.push(' ');
             } else {
                 cells.push(character);
@@ -40,10 +37,42 @@ pub fn load_maze(filename: &str, block_size: usize) -> (Maze, Player) {
         maze.push(cells);
     }
 
+    let (row, col) = player_cell.unwrap_or((0, 0));
+    let pos = Vec2::new(
+        (col * block_size + block_size / 2) as f32,
+        (row * block_size + block_size / 2) as f32,
+    );
+
     let player = Player {
-        pos: player_pos.unwrap_or_else(|| Vec2::new(0.0, 0.0)),
-        a: PI / 3.0,
+        pos,
+        // Se orienta automáticamente hacia un pasillo abierto en vez de un
+        // ángulo fijo, para no depender de la forma de un laberinto en
+        // particular (importante una vez que haya varios niveles, Etapa 10).
+        a: facing_toward_open_cell(&maze, row, col),
     };
 
     (maze, player)
+}
+
+fn facing_toward_open_cell(maze: &Maze, row: usize, col: usize) -> f32 {
+    let directions: [(i32, i32, f32); 4] = [
+        (0, 1, 0.0),         // este
+        (1, 0, PI / 2.0),    // sur
+        (0, -1, PI),         // oeste
+        (-1, 0, -PI / 2.0),  // norte
+    ];
+
+    for (dr, dc, angle) in directions {
+        let nr = row as i32 + dr;
+        let nc = col as i32 + dc;
+        if nr < 0 || nc < 0 {
+            continue;
+        }
+
+        if maze.get(nr as usize).and_then(|r| r.get(nc as usize)) == Some(&' ') {
+            return angle;
+        }
+    }
+
+    0.0
 }
