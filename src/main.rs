@@ -5,7 +5,7 @@ mod player;
 
 use minifb::{Key, Window, WindowOptions};
 use std::f32::consts::PI;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::caster::cast_ray;
 use crate::framebuffer::Framebuffer;
@@ -72,10 +72,10 @@ fn render(framebuffer: &mut Framebuffer, maze: &Maze, player: &Player) {
 }
 
 fn main() {
-    let window_width = 1300;
-    let window_height = 900;
-    let framebuffer_width = 1300;
-    let framebuffer_height = 900;
+    let window_width = 1000;
+    let window_height = 600;
+    let framebuffer_width = 1000;
+    let framebuffer_height = 600;
     let frame_delay = Duration::from_millis(16);
 
     let (maze, mut player) = load_maze("./assets/levels/level1.txt", BLOCK_SIZE);
@@ -87,12 +87,24 @@ fn main() {
         "Raycasting",
         window_width,
         window_height,
-        WindowOptions::default(),
+        WindowOptions {
+            resize: true,
+            ..WindowOptions::default()
+        },
     )
     .unwrap();
 
+    let mut last_frame = Instant::now();
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        process_events(&window, &mut player);
+        let now = Instant::now();
+        // clamp: un frame anormalmente lento (alt-tab, disco, etc.) nunca
+        // debe producir un salto de posición lo bastante grande como para
+        // atravesar una pared entre dos frames.
+        let dt = (now - last_frame).as_secs_f32().min(0.1);
+        last_frame = now;
+
+        process_events(&window, &mut player, &maze, BLOCK_SIZE as f32, dt);
 
         let i = player.pos.x as usize / BLOCK_SIZE;
         let j = player.pos.y as usize / BLOCK_SIZE;

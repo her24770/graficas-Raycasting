@@ -2,33 +2,89 @@ use minifb::{Key, Window};
 use nalgebra_glm::Vec2;
 use std::f32::consts::PI;
 
+use crate::maze::Maze;
+
 pub struct Player {
     pub pos: Vec2,
     pub a: f32,
 }
 
-/// Movimiento heredado de la base del profesor (rama 09-RC-03-MAZE-MOVEMENT).
-/// Sin colisiones todavía y sin escalar por delta de tiempo — eso llega en
-/// la Etapa 2 (Movimiento y colisiones) del PLAN.md.
-pub fn process_events(window: &Window, player: &mut Player) {
-    const MOVE_SPEED: f32 = 10.0;
-    const ROTATION_SPEED: f32 = PI / 10.0;
+/// Velocidad de movimiento en unidades del mundo por segundo (no por frame).
+const MOVE_SPEED: f32 = 300.0;
+/// Velocidad de rotación en radianes por segundo.
+const ROTATION_SPEED: f32 = PI;
+/// Radio de colisión del jugador, como fracción del tamaño de celda.
+const PLAYER_RADIUS_RATIO: f32 = 0.2;
+
+/// True si la celda que contiene (x, y) es sólida. Cualquier coordenada
+/// fuera del laberinto también cuenta como sólida, para que nunca haya
+/// panics por indexar fuera de rango.
+fn is_wall(maze: &Maze, x: f32, y: f32, block_size: f32) -> bool {
+    if x < 0.0 || y < 0.0 {
+        return true;
+    }
+
+    let col = (x / block_size) as usize;
+    let row = (y / block_size) as usize;
+
+    match maze.get(row).and_then(|r| r.get(col)) {
+        Some(' ') => false,
+        Some(_) => true,
+        None => true,
+    }
+}
+
+/// True si un jugador con ese radio, centrado en `pos`, se solapa con una pared.
+fn collides(maze: &Maze, pos: Vec2, radius: f32, block_size: f32) -> bool {
+    let checks = [
+        (pos.x - radius, pos.y),
+        (pos.x + radius, pos.y),
+        (pos.x, pos.y - radius),
+        (pos.x, pos.y + radius),
+    ];
+
+    checks.iter().any(|&(x, y)| is_wall(maze, x, y, block_size))
+}
+
+/// Lee teclado y actualiza al jugador. El movimiento se resuelve por eje
+/// (slide): si el desplazamiento en x choca se descarta, pero el de y se
+/// intenta igual, para poder deslizarse contra la pared en vez de quedar
+/// pegado en las esquinas.
+pub fn process_events(window: &Window, player: &mut Player, maze: &Maze, block_size: f32, dt: f32) {
+    let mut turn = 0.0;
+    let mut forward = 0.0;
 
     if window.is_key_down(Key::A) {
-        player.a -= ROTATION_SPEED;
+        turn -= ROTATION_SPEED;
     }
 
     if window.is_key_down(Key::D) {
-        player.a += ROTATION_SPEED;
+        turn += ROTATION_SPEED;
     }
 
     if window.is_key_down(Key::W) {
-        player.pos.x += MOVE_SPEED * player.a.cos();
-        player.pos.y += MOVE_SPEED * player.a.sin();
+        forward += 1.0;
     }
 
     if window.is_key_down(Key::S) {
-        player.pos.x -= MOVE_SPEED * player.a.cos();
-        player.pos.y -= MOVE_SPEED * player.a.sin();
+        forward -= 1.0;
+    }
+
+    player.a += turn * dt;
+
+    if forward != 0.0 {
+        let radius = block_size * PLAYER_RADIUS_RATIO;
+        let step = MOVE_SPEED * forward * dt;
+        let dir = Vec2::new(player.a.cos(), player.a.sin());
+
+        let try_x = Vec2::new(player.pos.x + dir.x * step, player.pos.y);
+        if !collides(maze, try_x, radius, block_size) {
+            player.pos.x = try_x.x;
+        }
+
+        let try_y = Vec2::new(player.pos.x, player.pos.y + dir.y * step);
+        if !collides(maze, try_y, radius, block_size) {
+            player.pos.y = try_y.y;
+        }
     }
 }
