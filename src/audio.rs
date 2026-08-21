@@ -7,6 +7,9 @@ use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 
 const BUMP_SAMPLE_RATE: u32 = 44100;
 const BUMP_DURATION_SECS: f32 = 0.15;
+/// Volumen de la música de fondo (1.0 = normal), bajado para que no tape
+/// los efectos de sonido cortos.
+const MUSIC_VOLUME: f32 = 0.35;
 
 /// Sonido de "golpe" generado por código (sin ningún archivo de audio):
 /// un tono corto que baja de frecuencia y se apaga rápido, como un "boink"
@@ -125,6 +128,9 @@ impl AudioEngine {
 
         match Sink::try_new(handle) {
             Ok(sink) => {
+                // más baja que el volumen normal, para que los efectos de
+                // sonido (golpe, victoria) se sigan escuchando por encima.
+                sink.set_volume(MUSIC_VOLUME);
                 sink.append(source.repeat_infinite());
                 self.music_sink = Some(sink);
             }
