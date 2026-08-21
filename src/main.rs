@@ -98,6 +98,7 @@ fn main() {
                 if blocked && !ps.was_blocked {
                     ps.collisions += 1;
                     ps.collision_flash = state::FLASH_DURATION;
+                    audio.play_bump();
                 }
                 ps.was_blocked = blocked;
 
@@ -125,6 +126,7 @@ fn main() {
                 render::hud::draw_collision_flash(&mut framebuffer, ps.collision_flash, state::FLASH_DURATION);
 
                 if ps.reached_goal(BLOCK_SIZE) {
+                    audio.play_sound_once("assets/audio/sfx/success.mp3");
                     next_state = Some(GameState::Success {
                         level_index: ps.level_index,
                         collisions: ps.collisions,

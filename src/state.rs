@@ -60,9 +60,6 @@ fn manhattan(a: (usize, usize), b: (usize, usize)) -> i32 {
 }
 
 /// Elige `count` celdas abiertas del laberinto, repartidas por el mapa en
-/// vez de amontonadas: arranca en `start` (la celda del jugador) y en cada
-/// paso agrega la celda abierta que quede más lejos de todas las ya
-/// elegidas (farthest point sampling).
 fn scatter_open_cells(maze: &Maze, start: (usize, usize), count: usize, block_size: f32) -> Vec<Vec2> {
     let open_cells: Vec<(usize, usize)> = maze
         .iter()

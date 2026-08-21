@@ -7,8 +7,6 @@ const FLASH_BLINKS: f32 = 3.0;
 const FLASH_MAX_STRENGTH: f32 = 0.55;
 
 /// Dibuja el contador de FPS en la esquina superior izquierda. `fps` ya
-/// debe venir suavizado (promedio móvil) para que el número no tiemble
-/// frame a frame por pequeñas variaciones de tiempo.
 pub fn draw_fps(framebuffer: &mut Framebuffer, fps: f32) {
     let text = format!("FPS:{}", fps.round() as i32);
     draw_text(framebuffer, 10, 10, &text, 0xFFFF00, 3);
@@ -36,8 +34,6 @@ pub fn draw_collisions(framebuffer: &mut Framebuffer, collisions: u32) {
 }
 
 /// Parpadeo rojo de pantalla completa al chocar contra una pared. `remaining`
-/// cuenta hacia atrás desde `duration`; en 0.0 no dibuja nada. Se apaga solo
-/// a medida que pasa el tiempo, sin que nadie tenga que resetearlo a mano.
 pub fn draw_collision_flash(framebuffer: &mut Framebuffer, remaining: f32, duration: f32) {
     if remaining <= 0.0 {
         return;
