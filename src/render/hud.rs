@@ -1,5 +1,10 @@
+use std::f32::consts::PI;
+
 use crate::font::draw_text;
 use crate::framebuffer::Framebuffer;
+
+const FLASH_BLINKS: f32 = 3.0;
+const FLASH_MAX_STRENGTH: f32 = 0.55;
 
 /// Dibuja el contador de FPS en la esquina superior izquierda. `fps` ya
 /// debe venir suavizado (promedio móvil) para que el número no tiemble
@@ -28,4 +33,30 @@ pub fn draw_timer(framebuffer: &mut Framebuffer, seconds_left: f32) {
 pub fn draw_collisions(framebuffer: &mut Framebuffer, collisions: u32) {
     let text = format!("GOLPES {collisions}");
     draw_text(framebuffer, 10, 46, &text, 0xFFAA55, 2);
+}
+
+/// Parpadeo rojo de pantalla completa al chocar contra una pared. `remaining`
+/// cuenta hacia atrás desde `duration`; en 0.0 no dibuja nada. Se apaga solo
+/// a medida que pasa el tiempo, sin que nadie tenga que resetearlo a mano.
+pub fn draw_collision_flash(framebuffer: &mut Framebuffer, remaining: f32, duration: f32) {
+    if remaining <= 0.0 {
+        return;
+    }
+
+    let progress = 1.0 - (remaining / duration).clamp(0.0, 1.0);
+    let envelope = 1.0 - progress; // se va apagando a medida que pasa el tiempo
+    let blink = (progress * FLASH_BLINKS * 2.0 * PI).sin().abs(); // varios destellos, no uno solo
+    let strength = envelope * blink * FLASH_MAX_STRENGTH;
+
+    for pixel in framebuffer.buffer.iter_mut() {
+        let r = (*pixel >> 16) & 0xFF;
+        let g = (*pixel >> 8) & 0xFF;
+        let b = *pixel & 0xFF;
+
+        let nr = (r as f32 + (0xFF - r) as f32 * strength) as u32;
+        let ng = (g as f32 * (1.0 - strength)) as u32;
+        let nb = (b as f32 * (1.0 - strength)) as u32;
+
+        *pixel = (nr << 16) | (ng << 8) | nb;
+    }
 }

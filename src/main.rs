@@ -22,8 +22,6 @@ use crate::textures::TextureAtlas;
 const BLOCK_SIZE: usize = 100;
 const FOV: f32 = PI / 3.0;
 const TARGET_FPS: f32 = 15.0;
-/// Distancia recorrida (en unidades del mundo) entre cada sonido de paso.
-const STEP_DISTANCE: f32 = 60.0;
 
 fn main() {
     let window_width = 1000;
@@ -93,22 +91,17 @@ fn main() {
                 }
             }
             GameState::Playing(ps) => {
-                let pos_before = ps.player.pos;
                 let blocked = process_events(&window, &mut ps.player, &ps.maze, BLOCK_SIZE as f32, dt, &mut ps.mouse_prev_x);
 
                 // solo cuenta el golpe cuando arranca el contacto, no cada
                 // cuadro que se sigue empujando contra la misma pared.
                 if blocked && !ps.was_blocked {
                     ps.collisions += 1;
+                    ps.collision_flash = state::FLASH_DURATION;
                 }
                 ps.was_blocked = blocked;
 
-                ps.distance_since_step += (ps.player.pos - pos_before).magnitude();
-                if ps.distance_since_step >= STEP_DISTANCE {
-                    ps.distance_since_step = 0.0;
-                    audio.play_sfx("assets/audio/sfx/step.mp3");
-                }
-
+                ps.collision_flash = (ps.collision_flash - dt).max(0.0);
                 ps.time_left = (ps.time_left - dt).max(0.0);
 
                 for sprite in ps.sprites.iter_mut() {
@@ -129,9 +122,9 @@ fn main() {
                 render::hud::draw_fps(&mut framebuffer, fps_smoothed);
                 render::hud::draw_timer(&mut framebuffer, ps.time_left);
                 render::hud::draw_collisions(&mut framebuffer, ps.collisions);
+                render::hud::draw_collision_flash(&mut framebuffer, ps.collision_flash, state::FLASH_DURATION);
 
                 if ps.reached_goal(BLOCK_SIZE) {
-                    audio.play_sfx("assets/audio/sfx/success.mp3");
                     next_state = Some(GameState::Success {
                         level_index: ps.level_index,
                         collisions: ps.collisions,

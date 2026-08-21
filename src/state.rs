@@ -19,6 +19,8 @@ const TORCH_COUNT: usize = 4;
 /// Tiempo límite por intento, en segundos. Si se agota antes de llegar a
 /// la meta, el nivel se pierde.
 pub const TIME_LIMIT: f32 = 60.0;
+/// Cuánto dura el parpadeo rojo de pantalla al chocar contra una pared.
+pub const FLASH_DURATION: f32 = 0.4;
 
 /// Todo el estado que solo existe mientras se está jugando un nivel. Se
 /// crea de cero cada vez que se entra a Playing (desde Welcome), así que
@@ -29,13 +31,14 @@ pub struct PlayingState {
     pub player: Player,
     pub sprites: Vec<Sprite>,
     pub z_buffer: Vec<f32>,
-    pub distance_since_step: f32,
     pub mouse_prev_x: Option<f32>,
     pub collisions: u32,
     /// Si el jugador ya estaba chocando contra una pared el frame pasado,
     /// para contar golpes (choques nuevos), no cuadros de contacto seguido.
     pub was_blocked: bool,
     pub time_left: f32,
+    /// Cuenta regresiva del parpadeo rojo; 0.0 significa apagado.
+    pub collision_flash: f32,
 }
 
 pub enum GameState {
@@ -132,11 +135,11 @@ impl PlayingState {
             player,
             sprites,
             z_buffer: vec![f32::MAX; framebuffer_width],
-            distance_since_step: 0.0,
             mouse_prev_x: None,
             collisions: 0,
             was_blocked: false,
             time_left: TIME_LIMIT,
+            collision_flash: 0.0,
         }
     }
 

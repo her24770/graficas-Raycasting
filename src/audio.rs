@@ -70,30 +70,4 @@ impl AudioEngine {
             }
         }
     }
-
-    /// Reproduce `path` una vez, sin bloquear. Si falta el archivo o falla
-    /// la decodificación, solo se loguea un aviso.
-    pub fn play_sfx(&self, path: &str) {
-        let Some(handle) = &self.handle else { return };
-
-        let file = match File::open(path) {
-            Ok(f) => f,
-            Err(_) => {
-                eprintln!("[audio] no se encontró el efecto de sonido {path}");
-                return;
-            }
-        };
-
-        let source = match Decoder::new(BufReader::new(file)) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[audio] no se pudo decodificar {path}: {e}");
-                return;
-            }
-        };
-
-        if let Err(e) = handle.play_raw(source.convert_samples()) {
-            eprintln!("[audio] no se pudo reproducir {path}: {e}");
-        }
-    }
 }
